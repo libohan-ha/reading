@@ -1,47 +1,55 @@
-import OpenAI from "openai";
+const API_BASE_URL = 'https://api.deepseek.com/v1';
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": import.meta.env.VITE_APP_URL,
-    "X-Title": "ReadAI",
-  },
-  dangerouslyAllowBrowser: true
-});
+const config = {
+  temperature: 1,
+  max_tokens: 8192,
+  model: "deepseek-chat",
+};
 
 export async function getAIResponse(bookContent: string, prompt: string): Promise<string> {
   try {
-    const completion = await openai.chat.completions.create({
-      model: "google/gemini-2.0-flash-thinking-exp:free",
-      messages: [
-        {
-          role: "user",
-          content: prompt + "\n\n书籍：" + bookContent
-        }
-      ]
+    console.log('Request parameters:', {
+      prompt,
+      bookContent,
+      config
     });
 
-    return completion.choices[0].message.content || '无响应';
-  } catch (error) {
-    console.error('Error calling AI API:', error);
-    throw new Error(getErrorMessage(error));
-  }
-}
+    const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: "user",
+            content: prompt + "\n\n书籍：" + bookContent
+          }
+        ],
+        temperature: config.temperature,
+        max_tokens: config.max_tokens,
+      })
+    });
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    // 检查特定的API错误
-    if (error.message.includes('invalid_request_error')) {
-      return '输入内容无效，请重试';
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'API request failed');
     }
-    if (error.message.includes('authentication_error')) {
-      return 'API 密钥无效或已过期';
+
+    const result = await response.json();
+    const content = result.choices[0]?.message?.content;
+    
+    console.log('API Response:', content);
+
+    if (!content) {
+      throw new Error('Empty response from API');
     }
-    if (error.message.includes('quota_exceeded')) {
-      return 'API 配额已用完，请稍后重试';
-    }
-    return error.message;
+
+    return content;
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
   }
-  return '发生未知错误，请稍后重试';
 }
